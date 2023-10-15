@@ -11,19 +11,49 @@ import json  # locally store the sent URLs to ensure only new is sent
 
 # we need to ask user for webhook first of all
 def get_discord_webhook():
+    try:
+        # Try to open the webhook.json file to see if the URL is stored there.
+        with open("webhook.json", "r") as file:
+            data = json.load(file)
+            # search dictionary
+            url_webhook = data["webhook"]
+            print("Existing webhook found: " + url_webhook)
+
+            # Ask user if they want to use the existing webhook.
+            while True:
+                use_existing = input("Do you want to use this webhook? (y/n): ")
+                if use_existing.lower() == "y":
+                    return url_webhook
+                elif use_existing.lower() == "n":
+                    break
+                else:
+                    print("Invalid input. Please enter 'y' or 'n'.")
+
+    except FileNotFoundError:
+        # If the file doesn't exist, we'll ask for the webhook URL.
+        pass
+    # corrupt file or error reading it bc misplaced
+    except (json.decoder.JSONDecodeError, KeyError):
+        # Handle potential issues with JSON data format.
+        print("Error reading webhook data. Please re-enter webhook URL.")
+
     while True:
         url_webhook = input("Please enter your Discord webhook URL: ")
-        # first we check if format is correct
+
         if url_webhook.startswith("https://discordapp.com/api/webhooks/"):
-            # Here the user can easily make a mistake in typing or pasting so I chose to send a test message to check if teh webhook succesfully connected
             test_message = {
                 "content": "This is a test message to see if we are connected"
             }
-            # saw on stack overflow how you can send to discord via the requests library
+
             response = requests.post(url_webhook, data=test_message)
-            # 204 is the code that shows the webhook is connected according to documentation
+
             if response.status_code == 204:
                 print("Test message sent successfully!")
+
+                # Save the new webhook URL to webhook.json file.
+                with open("webhook.json", "w") as file:
+                    json.dump({"webhook": url_webhook}, file)
+
                 return url_webhook
             else:
                 print(
@@ -42,28 +72,24 @@ def load_sent_urls():
             return json.load(file)
     except FileNotFoundError:
         return []
+    except json.JSONDecodeError:
+        print(
+            "Warning: Could not decode JSON in sent_urls.json. Using an empty list instead."
+        )
+        return []
 
 
 sent_url = load_sent_urls()  # list of URLs we already sent
-
-
-def save_sent_urls(sent_url):
-    with open("sent_urls.json", "w") as file:
-        json.dump(sent_url, file)
 
 
 def send_to_discord(content):
     # Sending a message to Discord channel
     payload = {"content": content}
     requests.post(webhook_url, data=payload)
-    if response.status_code == 204:
-        # Basically if our request goes through ie status code 204 according to documentation we add the url to sent urls temporarily and also save it to the json
-        sent_url.append(url)
-        save_sent_urls(sent_url)
 
 
 # Basically just return true if we have listing already in list then dont return
-def is_new_listing(listing, sent_url):
+def is_new_listing(listing):
     listing_url = (
         listing.find(class_="s-item__link")["href"]
         if listing.find(class_="s-item__link")
@@ -75,16 +101,16 @@ def is_new_listing(listing, sent_url):
     return False
 
 
-url = input(
+url_ = input(
     "Please enter the eBay URL: "
 )  # here you are asked for the URL of your item
 
 
-if "ebay.co.uk" not in url:
+if "ebay.co.uk" not in url_:
     print("Please provide a valid eBay URL.")
 
 else:
-    response = requests.get(url)
+    response = requests.get(url_)
 
     """" The "200" is a HTTP status code which shows that a connection was established
     using the TCP/IP protocol (basically the server saying ok you can access the site) & 
@@ -147,75 +173,84 @@ else:
 
         count_list = 0
 
-        # the index here is each listing and we get that with each item that contains "s-item s-item__pl-on-bottom"
-        # Note: I would normally utilise the .text.strip() but in the case of eBay i found that when this was used the outputs would also include <--!""--> (html comments) and other unrequired text etc so I read the documentation and found that .get_text removes all things in <> and just includes the text and strip=true works the same as .strip()
-        for index, listing in enumerate(listings):
-            # Check if it is a new listing
-            if not is_new_listing(listing):
-                continue
-            price_element = listing.find(class_="s-item__price")
-            # Here I just made sure to refind the prices but on an item by item basis, compare them to the values we already have and if it is a match ie it is greater than minimum and meets profit margin then the script is ran
-            if price_element:
-                price_text = price_element.get_text(strip=True)
-                match = re.search(r"\d+\.\d+", price_text)
-                # This wasnt mandatory but I found some items that were glitched broke the code so I had to make sure that match existed before I make a float
-                if match:
-                    price = float(match.group())
-                    if min_price < price < (lowest_price - profit_margin):
-                        count_list += 1
-                        # Here I defined content element so it makes it easy to print to discord via concatination
-                        content = f"\nListing {count_list}:\n"
-                        # Extracting and printing the title
-                        # Here I used if else statement just checks that the element is not blank
-                        # I also found that in most the titles there was a "New listing" string so I used the replace to remove that out, equally you can use string slicing
-                        title = listing.find(
-                            "span", {"role": "heading", "aria-level": "3"}
-                        )
-                        content += f"Title: {title.get_text(strip=True).replace('New listing', '', 1) if title else 'N/A'}\n"
-
-                        # Extracting and printing the date
-                        # Here we use select_one which uses CSS selectors because we can only find the "date" in a nested structure of classes
-                        date = listing.select_one(
-                            ".s-item__dynamic.s-item__listingDate .BOLD"
-                        )
-                        content += (
-                            f"Date: {date.get_text(strip=True) if date else 'N/A'}"
-                        )
-
-                        # Printing the price element
-                        content += f"Price: {price_text}\n"
-
-                        # Extracting and printing the shipping cost
-                        # I wanted to purely derive the numbers which was hard because all the shipping cost etc were texts with numbers in the middle, I thought to utilise the .isdigit() logic integrated in python but after researching I came accross the re library which was much easier to implement
-                        shipping_cost_element = listing.find(
-                            class_="s-item__shipping s-item__logisticsCost"
-                        )
-                        if shipping_cost_element:
-                            shipping_cost_text = shipping_cost_element.get_text(
-                                strip=True
+        while True:
+            # the index here is each listing and we get that with each item that contains "s-item s-item__pl-on-bottom"
+            # Note: I would normally utilise the .text.strip() but in the case of eBay i found that when this was used the outputs would also include <--!""--> (html comments) and other unrequired text etc so I read the documentation and found that .get_text removes all things in <> and just includes the text and strip=true works the same as .strip()
+            for index, listing in enumerate(listings):
+                # Check if it is a new listing
+                if not is_new_listing(listing):
+                    continue
+                price_element = listing.find(class_="s-item__price")
+                # Here I just made sure to refind the prices but on an item by item basis, compare them to the values we already have and if it is a match ie it is greater than minimum and meets profit margin then the script is ran
+                if price_element:
+                    price_text = price_element.get_text(strip=True)
+                    match = re.search(r"\d+\.\d+", price_text)
+                    # This wasnt mandatory but I found some items that were glitched broke the code so I had to make sure that match existed before I make a float
+                    if match:
+                        price = float(match.group())
+                        if min_price < price < (lowest_price - profit_margin):
+                            count_list += 1
+                            # Here I defined content element so it makes it easy to print to discord via concatination
+                            content = f"\nListing {count_list}:\n"
+                            # Extracting and printing the title
+                            # Here I used if else statement just checks that the element is not blank
+                            # I also found that in most the titles there was a "New listing" string so I used the replace to remove that out, equally you can use string slicing
+                            title = listing.find(
+                                "span", {"role": "heading", "aria-level": "3"}
                             )
-                            # here we are basically saying we want only the numbers in the form nnn.nnn as in decimals
-                            shipping_cost_numbers = re.findall(
-                                r"\d+\.\d+", shipping_cost_text
+                            content += f"Title: {title.get_text(strip=True).replace('New listing', '', 1) if title else 'N/A'}\n"
+
+                            # Extracting and printing the date
+                            # Here we use select_one which uses CSS selectors because we can only find the "date" in a nested structure of classes
+                            date = listing.select_one(
+                                ".s-item__dynamic.s-item__listingDate .BOLD"
                             )
-                            # given that shipping_cost_numbers print it basically
-                            shipping_cost = (
-                                " ".join(shipping_cost_numbers)
-                                if shipping_cost_numbers
-                                else "Free"
+                            content += (
+                                f"Date: {date.get_text(strip=True) if date else 'N/A'}"
                             )
-                        else:
-                            shipping_cost = "Free"
 
-                        content += f"Shipping Cost: {shipping_cost}\n"
+                            # Printing the price element
+                            content += f"Price: {price_text}\n"
 
-                        # Extracting and printing the URL
-                        # Note that the URL was located in the tag itself so I didnt want to use .get_text because that would remove the url so instead I used[""] which basically finds an attribute located in the text called href it will take it and extract the text within it
-                        url = listing.find(class_="s-item__link")
-                        content += f"URL: {url['href'] if url and url.has_attr('href') else 'N/A'}\n"
+                            # Extracting and printing the shipping cost
+                            # I wanted to purely derive the numbers which was hard because all the shipping cost etc were texts with numbers in the middle, I thought to utilise the .isdigit() logic integrated in python but after researching I came accross the re library which was much easier to implement
+                            shipping_cost_element = listing.find(
+                                class_="s-item__shipping s-item__logisticsCost"
+                            )
+                            if shipping_cost_element:
+                                shipping_cost_text = shipping_cost_element.get_text(
+                                    strip=True
+                                )
+                                # here we are basically saying we want only the numbers in the form nnn.nnn as in decimals
+                                shipping_cost_numbers = re.findall(
+                                    r"\d+\.\d+", shipping_cost_text
+                                )
+                                # given that shipping_cost_numbers print it basically
+                                shipping_cost = (
+                                    " ".join(shipping_cost_numbers)
+                                    if shipping_cost_numbers
+                                    else "Free"
+                                )
+                            else:
+                                shipping_cost = "Free"
 
-                        send_to_discord(f"NEW PROFITABLE LISTING! \n\n {content} \n\n")
-                    count_list = 0
+                            content += f"Shipping Cost: {shipping_cost}\n"
+
+                            # Extracting and printing the URL
+                            # Note that the URL was located in the tag itself so I didnt want to use .get_text because that would remove the url so instead I used[""] which basically finds an attribute located in the text called href it will take it and extract the text within it
+                            url_2 = listing.find(class_="s-item__link")
+                            content += f"URL: {url_2['href'] if url_2 and url_2.has_attr('href') else 'N/A'}\n"
+
+                            send_to_discord(
+                                f"NEW PROFITABLE LISTING! \n\n {content} \n\n"
+                            )
+                            sent_url.append(str(url_2["href"]))
+                            with open("sent_urls.json", "w") as file:
+                                json.dump(sent_url, file)
+
+            for _ in range(6):
+                print("Script is running...")
+                time.sleep(30)
 
     else:
         print(f"Failed to retrieve content: {response.status_code}")
