@@ -42,7 +42,7 @@ Change scrape time: Open scraper.py scroll to bottom change time.sleep(30) - thi
 Run: Navigate to the project directory and open the RUNME file.
 Usage
 Setup Discord Webhook: Create a Discord webhook and provide its URL when prompted by the application.
-Input eBay URL: Provide the eBay.co.uk URL of the listings page you wish to monitor.
+Input eBay URL: Provide the eBay.co.uk URL of the listings page you wish to monitor, I advise you search for item you want Select BUY-IT-NOW and sort by lastesy or newest listing.
 Configure Parameters: Input the desired profit margin (how much below the current lowest non-profitable price in the market is), lowest acceptable purchase price(to ensure product is authentic), and how much below the current lowest non-profitable price in the market.
 Receive Notifications: The application will send notifications to your Discord channel when it finds listings within your defined profitable range.
 
