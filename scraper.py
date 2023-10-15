@@ -148,7 +148,9 @@ else:
         how much you want your profit margin to be and the lowest price you would pay for a genuine product i.e you cant get ps5 for less than 200 if it is real as of 2023"""
 
         lowest_price = float(
-            get_user_input("Enter the lowest price of your item on the market: ")
+            get_user_input(
+                "Enter the current lowest non-profitable price for your product: "
+            )
         )
         profit_margin = float(get_user_input("Enter desired profit margin: "))
         min_price = float(
