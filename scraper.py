@@ -40,7 +40,7 @@ def get_discord_webhook():
     while True:
         url_webhook = input("Please enter your Discord webhook URL: ")
 
-        if url_webhook.startswith("https://discordapp.com/api/webhooks/"):
+        if url_webhook.startswith("https://discord") and "api" in url_webhook:
             test_message = {
                 "content": "This is a test message to see if we are connected"
             }
