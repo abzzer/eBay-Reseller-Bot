@@ -1,4 +1,4 @@
-# ----------------------EBAY WEBSCRAPER FOR RESELLING----------------------
+# ---EBAY WEBSCRAPER FOR RESELLING---
 
 Welcome to this project. This project is a webscraper designed to work on EBAY.co.uk
 
